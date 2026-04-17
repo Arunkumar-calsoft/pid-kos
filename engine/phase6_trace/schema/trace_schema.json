@@ -1,0 +1,192 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Phase 6 Reasoning Trace",
+  "description": "Read-only reasoning trace capturing how an answer was obtained from the P&ID graph using deterministic queries.",
+  "type": "object",
+  "required": [
+    "trace_id",
+    "phase",
+    "question",
+    "context",
+    "steps",
+    "summary",
+    "provenance",
+    "timestamps"
+  ],
+  "properties": {
+    "trace_id": {
+      "type": "string",
+      "description": "Deterministic unique identifier for this trace"
+    },
+
+    "phase": {
+      "type": "integer",
+      "enum": [6],
+      "description": "Architecture phase identifier (always 6)"
+    },
+
+    "question": {
+      "type": "object",
+      "required": ["text", "category"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Exact engineer or system question being answered"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "inventory",
+            "topology",
+            "lines",
+            "instruments",
+            "valves",
+            "directionality",
+            "redundancy",
+            "external_interfaces",
+            "reachability",
+            "quality"
+          ]
+        }
+      }
+    },
+
+    "context": {
+      "type": "object",
+      "description": "Inputs that parameterize the question",
+      "additionalProperties": {
+        "type": ["string", "number", "boolean"]
+      }
+    },
+
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Ordered reasoning steps used to answer the question",
+      "items": {
+        "type": "object",
+        "required": [
+          "step_id",
+          "intent",
+          "source",
+          "query",
+          "parameters",
+          "result_stats"
+        ],
+        "properties": {
+          "step_id": {
+            "type": "integer",
+            "description": "Sequential step number"
+          },
+
+          "intent": {
+            "type": "string",
+            "description": "Why this step was executed (human-readable)"
+          },
+
+          "source": {
+            "type": "object",
+            "required": ["phase", "file"],
+            "properties": {
+              "phase": {
+                "type": "integer",
+                "description": "Originating phase (typically 5)"
+              },
+              "file": {
+                "type": "string",
+                "description": "Cypher file or module name"
+              },
+              "section": {
+                "type": "string",
+                "description": "Optional section label inside the source file"
+              }
+            }
+          },
+
+          "query": {
+            "type": "string",
+            "description": "Executed Cypher query text (verbatim)"
+          },
+
+          "parameters": {
+            "type": "object",
+            "description": "Parameters passed to the query",
+            "additionalProperties": {
+              "type": ["string", "number", "boolean"]
+            }
+          },
+
+          "result_stats": {
+            "type": "object",
+            "required": ["rows"],
+            "properties": {
+              "rows": {
+                "type": "integer",
+                "description": "Number of rows returned"
+              },
+              "nodes_touched": {
+                "type": "integer"
+              },
+              "relationships_touched": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "summary": {
+      "type": "object",
+      "required": ["statement"],
+      "properties": {
+        "statement": {
+          "type": "string",
+          "description": "Neutral factual summary of findings"
+        },
+        "counts": {
+          "type": "object",
+          "description": "Optional aggregated counts",
+          "additionalProperties": {
+            "type": "number"
+          }
+        }
+      }
+    },
+
+    "provenance": {
+      "type": "object",
+      "required": ["pid_id", "graph_version"],
+      "properties": {
+        "pid_id": {
+          "type": "string",
+          "description": "P&ID drawing identifier"
+        },
+        "graph_version": {
+          "type": "string",
+          "description": "Graph build or ingestion version"
+        },
+        "executed_by": {
+          "type": "string",
+          "description": "System or user that triggered the trace"
+        }
+      }
+    },
+
+    "timestamps": {
+      "type": "object",
+      "required": ["started_at", "completed_at"],
+      "properties": {
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "completed_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

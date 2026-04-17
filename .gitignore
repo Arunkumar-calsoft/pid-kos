@@ -1,0 +1,69 @@
+# ============================================================
+#  PID-KOS  —  .gitignore
+#  NEVER commit credentials, PID data, or generated outputs
+# ============================================================
+
+# ── Credentials & secrets ─────────────────────────────────────────────────────
+# NEVER commit API keys or passwords.
+agent/groq.env
+agent/.env
+.env
+*.env
+
+# ── Machine-specific config (use .example files instead) ──────────────────────
+config/neo4j.yaml
+config/storage.yaml
+
+# ── PID source data (proprietary drawings) ────────────────────────────────────
+pid_store/
+patches/
+
+# ── Generated & runtime artefacts ─────────────────────────────────────────────
+logs/
+archive/
+engine/phase6_trace/traces/
+engine/phase5_cypher/_meta/queries.json
+
+# ── Debug / smoke-test output files at project root ───────────────────────────
+diag_output.txt
+smoke_result.txt
+smoke_c2.txt
+smoke_eng*.txt
+tests/results.txt
+
+# ── Python cache ──────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Build & distribution ──────────────────────────────────────────────────────
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# ── IDE & editor ──────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Logs & temp output ────────────────────────────────────────────────────────
+logs/*.jsonl
+*.log
+
+# ── Test & coverage artefacts ─────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/

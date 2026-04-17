@@ -1,0 +1,15 @@
+# config/storage.yaml
+#
+# store_root is the base directory for all PID source files.
+# File paths stored in Neo4j PID nodes are RELATIVE to this root.
+#
+# Example:
+#   store_root: /path/to/project/pid_store
+#   PID node:   graphml_path = PLANT_001/SKID_01/PID_2/2.graphml
+#   Resolved:   /path/to/project/pid_store/PLANT_001/SKID_01/PID_2/2.graphml
+#
+# To move files to a network share, change store_root here only.
+# No Neo4j data changes required.
+
+storage:
+  store_root: "/absolute/path/to/your/pid_store"

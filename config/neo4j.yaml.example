@@ -1,0 +1,9 @@
+neo4j:
+  uri: neo4j://localhost:7687
+  user: neo4j
+  # SECURITY: Set NEO4J_PASSWORD environment variable to override this value.
+  # Windows:  $env:NEO4J_PASSWORD = "your_password"
+  # Linux:    export NEO4J_PASSWORD=your_password
+  # The env var takes priority. This fallback is for local dev only.
+  password: YOUR_NEO4J_PASSWORD_HERE
+  database: chatbot

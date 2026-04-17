@@ -1,0 +1,10 @@
+{
+  "output_dir": "phase8_output",
+  "include_traces": true,
+  "trace_dir": "engine/phase6_trace/traces",
+  "phase5_cypher_dir": "phase5_cypher",
+  "llm": {
+    "provider": "auto",
+    "max_tokens": 800
+  }
+}

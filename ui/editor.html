@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>KOS-PID GraphML Editor</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:'Space Grotesk',sans-serif;background:#05070f;color:#e2e8f0;overflow:hidden}
+:root{
+  --a:#d97706;--al:#fbbf24;--bg:#080c15;--sf:#111a2a;--bd:#243750;
+  --tx:#e2e8f0;--mu:#4a6080;--re:#ef4444;--gr:#22c55e;--cy:#22d3ee;
+  --vi:#a78bfa;--pk:#f472b6;--or:#f97316;
+}
+
+/* ── Layout ────────────────────────────────────────────── */
+.root{display:grid;grid-template-rows:48px 1fr 28px;grid-template-columns:1fr 380px;
+      height:100vh;gap:0;background:#05070f}
+.toolbar{grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:0 14px;
+         background:linear-gradient(120deg,#0e1624,#111b2d);border-bottom:1px solid var(--bd)}
+.canvas-wrap{position:relative;overflow:hidden;background:#050810;cursor:crosshair;
+             background-image:linear-gradient(#16213326 1px,transparent 1px),
+                              linear-gradient(90deg,#16213326 1px,transparent 1px);
+             background-size:24px 24px}
+.canvas-wrap.panning{cursor:grabbing !important}
+.panel{display:flex;flex-direction:column;border-left:1px solid var(--bd);
+       background:linear-gradient(180deg,#101829,#0c1422);overflow:hidden}
+.statusbar{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:0 14px;
+           background:#080d18;border-top:1px solid var(--bd);font-size:10px;color:var(--mu);
+           font-family:'IBM Plex Mono',monospace}
+
+/* ── Toolbar ───────────────────────────────────────────── */
+.tb-brand{font-size:11px;font-weight:700;color:var(--al);letter-spacing:.1em;margin-right:8px}
+.pid-sel{background:#0a1525;border:1px solid var(--a);color:var(--al);font-size:10px;
+         padding:3px 8px;border-radius:3px;cursor:pointer;outline:none;font-family:'IBM Plex Mono',monospace}
+.pid-sel option{background:#111827;color:#e2e8f0}
+.sep{width:1px;height:24px;background:var(--bd);margin:0 4px}
+.mode-btn{background:transparent;border:1px solid var(--bd);color:var(--mu);
+          font-size:9px;padding:4px 10px;border-radius:3px;cursor:pointer;
+          font-family:'IBM Plex Mono',monospace;letter-spacing:.06em;transition:all .12s}
+.mode-btn:hover{border-color:var(--a);color:var(--a)}
+.mode-btn.active{border-color:var(--a);color:var(--al);background:rgba(217,119,6,.15)}
+.mode-btn.active.connect{border-color:var(--gr);color:var(--gr);background:rgba(34,197,94,.12)}
+.mode-btn.active.erase{border-color:var(--re);color:var(--re);background:rgba(239,68,68,.12)}
+.tb-action{background:transparent;border:1px solid var(--bd);color:var(--mu);
+           font-size:9px;padding:4px 10px;border-radius:3px;cursor:pointer;
+           font-family:'IBM Plex Mono',monospace;letter-spacing:.06em;transition:all .12s;margin-left:auto}
+.tb-action:hover{border-color:var(--cy);color:var(--cy)}
+.tb-note{font-size:9px;color:var(--mu);font-family:'IBM Plex Mono',monospace;margin-left:6px}
+
+/* ── Canvas SVG overlay ─────────────────────────────────── */
+#canvas-root{position:relative;display:inline-block;line-height:0;min-width:100%;min-height:100%}
+.pid-img{display:block;width:100%;height:auto;opacity:.9;user-select:none;pointer-events:none}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%}
+
+/* ── Zoom controls ──────────────────────────────────────── */
+.zoom-btn{background:transparent;border:1px solid var(--bd);color:var(--mu);
+          font-size:14px;padding:0 8px;height:22px;border-radius:3px;cursor:pointer;
+          line-height:1;transition:all .12s;vertical-align:middle}
+.zoom-btn:hover{border-color:var(--a);color:var(--a)}
+.zoom-disp{font-size:9px;color:var(--mu);font-family:'IBM Plex Mono',monospace;
+           min-width:36px;text-align:center;letter-spacing:.04em}
+
+/* ── Node hover tooltip ─────────────────────────────────── */
+#node-tip{position:fixed;background:#0d1929;border:1px solid var(--bd);border-radius:4px;
+          padding:4px 10px;font-size:9px;font-family:'IBM Plex Mono',monospace;
+          color:#94a3b8;pointer-events:none;z-index:800;display:none;line-height:1.6;
+          max-width:240px;word-break:break-all}
+
+/* ── SVG node boxes ─────────────────────────────────────── */
+.node-box{cursor:pointer;fill:rgba(255,255,255,.04);stroke:#3a5278;stroke-width:1;
+          transition:fill .1s,stroke .1s}
+.node-box:hover{fill:rgba(217,119,6,.18);stroke:var(--a);stroke-width:1.5}
+.node-box.selected{fill:rgba(250,191,36,.18);stroke:var(--al);stroke-width:2}
+.node-box.connecting-source{fill:rgba(34,197,94,.22);stroke:var(--gr);stroke-width:2;
+  animation:pulse-green 1.2s infinite}
+@keyframes pulse-green{0%,100%{stroke-opacity:1}50%{stroke-opacity:.4}}
+
+/* ── SVG edges ──────────────────────────────────────────── */
+.pipe-edge{stroke:#3a5278;stroke-width:1.5;fill:none;pointer-events:none;opacity:.6}
+.pipe-edge.editor{stroke:var(--gr);stroke-dasharray:5,3;opacity:.9}
+.pipe-edge.hoverable{pointer-events:stroke;cursor:pointer;stroke-width:6;opacity:0}
+.pipe-edge.hoverable:hover + .pipe-edge-vis{stroke:var(--re);stroke-width:2.5;opacity:1}
+.pipe-edge-vis.erase-mode{pointer-events:none;stroke:#3a5278;stroke-width:1.5;opacity:.6}
+.pipe-edge-vis.erase-mode-hover{stroke:var(--re) !important;opacity:1 !important}
+
+/* ── Connect cursor line ─────────────────────────────────── */
+#connect-line{stroke:var(--gr);stroke-width:1.5;stroke-dasharray:6,4;
+              fill:none;pointer-events:none;opacity:.7;display:none}
+
+/* ── Panel ──────────────────────────────────────────────── */
+.panel-head{padding:10px 14px;border-bottom:1px solid var(--bd);flex-shrink:0;
+            background:linear-gradient(115deg,#182033,#111a2e)}
+.panel-title{font-size:11px;color:#c7d2fe;letter-spacing:.1em;font-weight:600}
+.panel-body{flex:1;overflow-y:auto;padding:12px}
+.panel-section{margin-bottom:18px}
+.section-label{font-size:8px;letter-spacing:.14em;color:var(--mu);text-transform:uppercase;
+               margin-bottom:8px;font-family:'IBM Plex Mono',monospace}
+
+/* ── Properties ─────────────────────────────────────────── */
+.prop-node-id{font-size:13px;color:var(--al);font-weight:700;margin-bottom:10px;
+              font-family:'IBM Plex Mono',monospace;word-break:break-all}
+.prop-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.prop-key{font-size:9px;color:var(--mu);font-family:'IBM Plex Mono',monospace;
+          min-width:110px;flex-shrink:0}
+.prop-val{flex:1;background:#0a1525;border:1px solid var(--bd);color:var(--tx);
+          font-size:10px;padding:3px 7px;border-radius:3px;outline:none;
+          font-family:'IBM Plex Mono',monospace;width:100%}
+.prop-val:focus{border-color:var(--a)}
+.prop-select{appearance:none;background:#0a1525 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%234a6080'/%3E%3C/svg%3E") right 6px center no-repeat;
+             padding-right:22px;cursor:pointer}
+.btn-apply{width:100%;padding:6px;background:rgba(217,119,6,.15);border:1px solid var(--a);
+           color:var(--al);font-size:10px;border-radius:4px;cursor:pointer;
+           font-family:'IBM Plex Mono',monospace;letter-spacing:.06em;transition:all .12s;margin-top:10px}
+.btn-apply:hover{background:rgba(217,119,6,.3)}
+.btn-connect-from{width:100%;padding:5px;background:rgba(34,197,94,.10);border:1px solid var(--gr);
+                  color:var(--gr);font-size:9px;border-radius:4px;cursor:pointer;
+                  font-family:'IBM Plex Mono',monospace;letter-spacing:.06em;margin-top:6px;transition:all .12s}
+.btn-connect-from:hover{background:rgba(34,197,94,.22)}
+.empty-state{color:var(--mu);font-size:10px;font-style:italic;text-align:center;padding:20px 0}
+
+/* ── Extra props kv ─────────────────────────────────────── */
+.kv-table{width:100%;border-collapse:collapse;font-size:9px;font-family:'IBM Plex Mono',monospace}
+.kv-table td{padding:3px 6px;border-bottom:1px solid #1a2840;vertical-align:top}
+.kv-table td:first-child{color:var(--mu);white-space:nowrap;width:40%}
+.kv-table td:last-child{color:#94a3b8;word-break:break-word}
+
+/* ── Patch history ──────────────────────────────────────── */
+.patch-item{background:#0a1525;border:1px solid var(--bd);border-radius:5px;
+            padding:8px 10px;margin-bottom:8px;position:relative}
+.patch-op{display:inline-block;font-size:8px;padding:1px 6px;border-radius:2px;
+          margin-bottom:4px;font-family:'IBM Plex Mono',monospace;letter-spacing:.05em}
+.op-add_edge{background:rgba(34,197,94,.15);color:var(--gr);border:1px solid rgba(34,197,94,.3)}
+.op-remove_edge{background:rgba(239,68,68,.12);color:var(--re);border:1px solid rgba(239,68,68,.3)}
+.op-relabel{background:rgba(167,139,250,.12);color:var(--vi);border:1px solid rgba(167,139,250,.3)}
+.op-set_property{background:rgba(34,211,238,.10);color:var(--cy);border:1px solid rgba(34,211,238,.3)}
+.op-rename_node{background:rgba(249,115,22,.12);color:var(--or);border:1px solid rgba(249,115,22,.3)}
+.patch-desc{font-size:9px;color:#94a3b8;line-height:1.4;margin-bottom:5px;font-family:'IBM Plex Mono',monospace}
+.patch-ts{font-size:8px;color:var(--mu)}
+.btn-undo{position:absolute;top:8px;right:8px;background:transparent;border:1px solid #374151;
+          color:var(--mu);font-size:8px;padding:2px 7px;border-radius:2px;cursor:pointer;
+          font-family:'IBM Plex Mono',monospace;transition:all .12s}
+.btn-undo:hover{border-color:var(--re);color:var(--re)}
+.no-patches{color:var(--mu);font-size:10px;font-style:italic;text-align:center;padding:12px 0}
+
+/* ── Confirm dialog ─────────────────────────────────────── */
+#confirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:900;
+                 display:flex;align-items:center;justify-content:center;display:none}
+#confirm-box{background:#0d1929;border:1px solid var(--a);border-radius:8px;
+             padding:24px;max-width:380px;width:90%}
+.confirm-title{font-size:13px;font-weight:600;color:var(--al);margin-bottom:10px}
+.confirm-body{font-size:11px;color:#94a3b8;line-height:1.6;margin-bottom:18px}
+.confirm-btns{display:flex;gap:8px;justify-content:flex-end}
+.btn-ok{padding:5px 18px;background:rgba(217,119,6,.2);border:1px solid var(--a);
+        color:var(--al);font-size:10px;border-radius:3px;cursor:pointer;
+        font-family:'IBM Plex Mono',monospace}
+.btn-ok:hover{background:rgba(217,119,6,.35)}
+.btn-cancel{padding:5px 18px;background:transparent;border:1px solid var(--bd);
+            color:var(--mu);font-size:10px;border-radius:3px;cursor:pointer;
+            font-family:'IBM Plex Mono',monospace}
+.btn-cancel:hover{border-color:var(--re);color:var(--re)}
+
+/* ── Toast ──────────────────────────────────────────────── */
+#toast{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);
+       background:#0d1929;border:1px solid var(--bd);border-radius:6px;
+       padding:8px 18px;font-size:10px;color:var(--tx);z-index:999;
+       opacity:0;transition:opacity .2s;pointer-events:none;font-family:'IBM Plex Mono',monospace}
+#toast.show{opacity:1}
+#toast.ok{border-color:var(--gr);color:var(--gr)}
+#toast.err{border-color:var(--re);color:var(--re)}
+
+/* ── Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:#080c15}
+::-webkit-scrollbar-thumb{background:#243750;border-radius:3px}
+</style>
+</head>
+<body>
+<div class="root">
+
+  <!-- ── Toolbar ──────────────────────────────────────────── -->
+  <div class="toolbar">
+    <span class="tb-brand">KOS-PID EDITOR</span>
+    <select id="pid-sel" class="pid-sel"><option>Loading…</option></select>
+    <div class="sep"></div>
+    <button class="mode-btn active" id="btn-select" onclick="setMode('select')">SELECT</button>
+    <button class="mode-btn connect" id="btn-connect" onclick="setMode('connect')">CONNECT</button>
+    <button class="mode-btn erase" id="btn-erase" onclick="setMode('erase')">ERASE EDGE</button>
+    <div class="sep"></div>
+    <button class="zoom-btn" onclick="zoomBy(1.4)" title="Zoom in (scroll wheel)">+</button>
+    <span class="zoom-disp" id="zoom-disp">100%</span>
+    <button class="zoom-btn" onclick="zoomBy(0.7)" title="Zoom out (scroll wheel)">−</button>
+    <button class="zoom-btn" onclick="resetZoom()" title="Reset zoom / fit">⊞</button>
+    <span class="tb-note" id="mode-hint">Click a node to inspect or edit it.</span>
+    <button class="tb-action" onclick="downloadGraphML()" title="Download GraphML with all patches applied">⬇ CORRECTED GRAPHML</button>
+  </div>
+
+  <!-- ── Canvas ───────────────────────────────────────────── -->
+  <div class="canvas-wrap" id="canvas-wrap">
+    <div id="canvas-root">
+      <img id="pid-img" class="pid-img" src="" alt="P&amp;ID">
+      <svg id="overlay" class="overlay" xmlns="http://www.w3.org/2000/svg">
+        <g id="edge-layer"></g>
+        <g id="node-layer"></g>
+        <line id="connect-line" x1="0" y1="0" x2="0" y2="0"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- ── Right panel ──────────────────────────────────────── -->
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-title">PROPERTIES &amp; HISTORY</div>
+    </div>
+    <div class="panel-body" id="panel-body">
+      <div class="panel-section">
+        <div class="section-label">Selected Node</div>
+        <div id="props-container"><div class="empty-state">Click a node to inspect it.</div></div>
+      </div>
+      <div class="panel-section">
+        <div class="section-label">Connect by Node ID</div>
+        <div class="prop-row">
+          <span class="prop-key">Source</span>
+          <input class="prop-val" id="cbyid-src" type="text" list="node-ids-list"
+                 placeholder="node id…" spellcheck="false" autocomplete="off">
+        </div>
+        <div class="prop-row">
+          <span class="prop-key">Target</span>
+          <input class="prop-val" id="cbyid-dst" type="text" list="node-ids-list"
+                 placeholder="node id…" spellcheck="false" autocomplete="off">
+        </div>
+        <button class="btn-connect-from" style="margin-top:8px" onclick="connectByID()">+ Add PIPE Edge</button>
+      </div>
+      <div class="panel-section">
+        <div class="section-label">Patch History</div>
+        <div id="patch-list"><div class="no-patches">No patches yet.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Status bar ───────────────────────────────────────── -->
+  <div class="statusbar">
+    <span id="status-pid" style="color:var(--al)">—</span>
+    <span>|</span>
+    <span id="status-nodes">0 nodes</span>
+    <span>|</span>
+    <span id="status-edges">0 edges</span>
+    <span>|</span>
+    <span id="status-patches">0 patches</span>
+    <span style="margin-left:auto;color:#1e3a5f">⚠ Phase 1+ annotations may be stale until re-run</span>
+  </div>
+</div>
+
+<!-- ── Confirm dialog ───────────────────────────────────────── -->
+<div id="confirm-overlay">
+  <div id="confirm-box">
+    <div class="confirm-title" id="confirm-title">Confirm</div>
+    <div class="confirm-body" id="confirm-body"></div>
+    <div class="confirm-btns">
+      <button class="btn-cancel" onclick="confirmCancel()">Cancel</button>
+      <button class="btn-ok" id="confirm-ok">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ────────────────────────────────────────────────── -->
+<div id="toast"></div>
+<!-- ── Node hover tooltip ───────────────────────────────────── -->
+<div id="node-tip"></div>
+<!-- ── Datalist for Connect-by-ID autocomplete ──────────────── -->
+<datalist id="node-ids-list"></datalist>
+
+<script>
+// ── Valid node labels (from schema_context.py) ────────────────────────────
+const VALID_LABELS = [
+  "valve","tank","instrumentation","instrument","connector",
+  "arrow","crossing","general","inlet/outlet",
+  "inferred_check_valve","inferred_inline_equipment"
+];
+
+// ── State ──────────────────────────────────────────────────────────────────
+const S = {
+  pidId:      null,
+  canvas:     {w: 0, h: 0},
+  nodes:      [],       // [{id, label, xmin, ymin, w, h, functional_label}]
+  edges:      [],       // [{source, target}]
+  patches:    [],
+  mode:       "select", // select | connect | erase
+  selected:   null,     // selected node id
+  connecting: null,     // first node in connect mode
+  nodeMap:    {},       // id → node
+  edgeSet:    new Set(),// "a|b" keys (sorted)
+};
+
+// ── Zoom / pan state ────────────────────────────────────────────────
+const Z = { scale: 1, ox: 0, oy: 0 };
+let _pan = null; // {startX, startY, startOx, startOy, moved}
+
+function applyTransform() {
+  const root = document.getElementById("canvas-root");
+  root.style.transformOrigin = "0 0";
+  root.style.transform = `translate(${Z.ox}px,${Z.oy}px) scale(${Z.scale})`;
+  document.getElementById("zoom-disp").textContent = Math.round(Z.scale * 100) + "%";
+}
+
+function zoomBy(factor, screenX, screenY) {
+  const wrap  = document.getElementById("canvas-wrap");
+  const wRect = wrap.getBoundingClientRect();
+  const px = (screenX !== undefined ? screenX - wRect.left : wRect.width  / 2);
+  const py = (screenY !== undefined ? screenY - wRect.top  : wRect.height / 2);
+  const newScale = Math.max(0.25, Math.min(12, Z.scale * factor));
+  const ratio    = newScale / Z.scale;
+  Z.ox = px - ratio * (px - Z.ox);
+  Z.oy = py - ratio * (py - Z.oy);
+  Z.scale = newScale;
+  applyTransform();
+}
+
+function resetZoom() {
+  Z.scale = 1; Z.ox = 0; Z.oy = 0;
+  applyTransform();
+}
+
+// ── Boot ─────────────────────────────────────────────────────────────
+window.addEventListener("DOMContentLoaded", async () => {
+  await loadPIDs();
+  document.getElementById("pid-sel").addEventListener("change", e => loadPID(e.target.value));
+
+  // Zoom: scroll wheel toward cursor
+  document.getElementById("canvas-wrap").addEventListener("wheel", ev => {
+    ev.preventDefault();
+    zoomBy(ev.deltaY < 0 ? 1.12 : 0.89, ev.clientX, ev.clientY);
+  }, { passive: false });
+
+  // Pan: middle-button drag OR left-drag on canvas background (not on a node/edge)
+  document.getElementById("canvas-wrap").addEventListener("mousedown", ev => {
+    const t = ev.target;
+    const isBackground = t === document.getElementById("overlay") ||
+                         t === document.getElementById("canvas-wrap") ||
+                         t === document.getElementById("canvas-root");
+    if (ev.button === 1 || (ev.button === 0 && isBackground)) {
+      ev.preventDefault();
+      _pan = { startX: ev.clientX, startY: ev.clientY, startOx: Z.ox, startOy: Z.oy, moved: false };
+      document.getElementById("canvas-wrap").classList.add("panning");
+    }
+  });
+  window.addEventListener("mousemove", ev => {
+    if (!_pan) return;
+    const dx = ev.clientX - _pan.startX, dy = ev.clientY - _pan.startY;
+    if (!_pan.moved && Math.sqrt(dx * dx + dy * dy) < 4) return;
+    _pan.moved = true;
+    Z.ox = _pan.startOx + dx;
+    Z.oy = _pan.startOy + dy;
+    applyTransform();
+  });
+  window.addEventListener("mouseup", () => {
+    if (_pan) { _pan = null; document.getElementById("canvas-wrap").classList.remove("panning"); }
+  });
+
+  // Escape: cancel in-progress connection
+  document.addEventListener("keydown", ev => {
+    if (ev.key === "Escape" && S.mode === "connect" && S.connecting) {
+      S.connecting = null; clearConnectLine(); refreshNodeHighlight();
+      hint("Cancelled. Click source node to start again.");
+    }
+  });
+});
+
+async function loadPIDs() {
+  const r = await fetch("/api/pids");
+  const pids = await r.json();
+  const sel = document.getElementById("pid-sel");
+  sel.innerHTML = pids.map(p => `<option value="${p}">${p}</option>`).join("");
+  if (pids.length) loadPID(pids[0]);
+}
+
+async function loadPID(pidId) {
+  S.pidId    = pidId;
+  S.selected = null;
+  S.connecting = null;
+  resetZoom();
+  document.getElementById("status-pid").textContent = pidId;
+  document.getElementById("pid-img").src = `/api/image/${pidId}`;
+
+  const [nodesRes, edgesRes, patchesRes] = await Promise.all([
+    fetch(`/api/nodes/${pidId}`).then(r => r.json()),
+    fetch(`/api/edges/${pidId}`).then(r => r.json()),
+    fetch(`/api/patches/${pidId}`).then(r => r.json()),
+  ]);
+
+  S.canvas  = nodesRes.canvas;
+  S.nodes   = nodesRes.nodes;
+  S.edges   = edgesRes;
+  S.patches = patchesRes;
+
+  S.nodeMap = {};
+  S.edgeSet = new Set();
+  S.nodes.forEach(n => { S.nodeMap[n.id] = n; });
+  S.edges.forEach(e => { S.edgeSet.add(_edgeKey(e.source, e.target)); });
+
+  renderAll();
+  refreshStatus();
+  renderPatches();
+  document.getElementById("props-container").innerHTML = '<div class="empty-state">Click a node to inspect it.</div>';
+
+  // Populate datalist for Connect-by-ID autocomplete
+  const dl = document.getElementById("node-ids-list");
+  if (dl) dl.innerHTML = S.nodes.map(n => `<option value="${_esc(n.id)}">`).join("");
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+function renderAll() {
+  const svg = document.getElementById("overlay");
+  const img = document.getElementById("pid-img");
+  const {w, h} = S.canvas;
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+
+  // Wait for image to load so we can size the SVG correctly
+  const sizeOverlay = () => {
+    svg.style.width  = img.offsetWidth  + "px";
+    svg.style.height = img.offsetHeight + "px";
+  };
+  img.onload = sizeOverlay;
+  if (img.complete) sizeOverlay();
+  window.addEventListener("resize", sizeOverlay);
+
+  renderEdges();
+  renderNodes();
+}
+
+function renderEdges() {
+  const layer = document.getElementById("edge-layer");
+  layer.innerHTML = "";
+  S.edges.forEach(e => {
+    const a = S.nodeMap[e.source], b = S.nodeMap[e.target];
+    if (!a || !b) return;
+    const ax = a.xmin + a.w / 2, ay = a.ymin + a.h / 2;
+    const bx = b.xmin + b.w / 2, by = b.ymin + b.h / 2;
+    const isPatch = S.patches.some(p =>
+      p.op === "add_edge" &&
+      (_edgeKey(p.node_id, p.target_id) === _edgeKey(e.source, e.target))
+    );
+
+    // Invisible wide hit area for erase mode
+    const hit = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    hit.setAttribute("x1", ax); hit.setAttribute("y1", ay);
+    hit.setAttribute("x2", bx); hit.setAttribute("y2", by);
+    hit.setAttribute("stroke-width", "8");
+    hit.setAttribute("stroke", "transparent");
+    hit.style.cursor = "pointer";
+    hit.style.pointerEvents = "stroke";
+    hit.dataset.source = e.source;
+    hit.dataset.target = e.target;
+    hit.addEventListener("mouseenter", () => { vis.style.stroke = "var(--re)"; vis.style.opacity = "1"; vis.style.strokeWidth = "2.5"; });
+    hit.addEventListener("mouseleave", () => { vis.style.stroke = isPatch ? "var(--gr)" : "#3a5278"; vis.style.opacity = isPatch ? ".9" : ".55"; vis.style.strokeWidth = isPatch ? "1.5" : "1"; });
+    hit.addEventListener("click", ev => onEdgeClick(e.source, e.target, ev));
+
+    // Visible line
+    const vis = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    vis.setAttribute("x1", ax); vis.setAttribute("y1", ay);
+    vis.setAttribute("x2", bx); vis.setAttribute("y2", by);
+    vis.setAttribute("stroke",       isPatch ? "var(--gr)" : "#3a5278");
+    vis.setAttribute("stroke-width", isPatch ? "1.5"       : "1");
+    vis.setAttribute("fill",         "none");
+    vis.style.opacity       = isPatch ? ".9" : ".55";
+    vis.style.pointerEvents = "none";
+    if (isPatch) vis.setAttribute("stroke-dasharray", "5,3");
+
+    layer.appendChild(hit);
+    layer.appendChild(vis);
+  });
+}
+
+function renderNodes() {
+  const layer = document.getElementById("node-layer");
+  layer.innerHTML = "";
+  S.nodes.forEach(n => {
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    r.setAttribute("x",      n.xmin);
+    r.setAttribute("y",      n.ymin);
+    r.setAttribute("width",  n.w);
+    r.setAttribute("height", n.h);
+    r.setAttribute("rx",     "2");
+    r.classList.add("node-box");
+    r.dataset.nodeId = n.id;
+    if (n.id === S.selected)   r.classList.add("selected");
+    if (n.id === S.connecting) r.classList.add("connecting-source");
+    r.addEventListener("click", ev => onNodeClick(n.id, ev));
+    r.addEventListener("mousemove", ev => { onNodeMouseMove(n.id, ev); _moveNodeTip(ev); });
+    r.addEventListener("mouseenter", ev => showNodeTip(n, ev));
+    r.addEventListener("mouseleave", () => { clearConnectLine(); hideNodeTip(); });
+    g.appendChild(r);
+    layer.appendChild(g);
+  });
+}
+
+function refreshNodeHighlight() {
+  document.querySelectorAll(".node-box").forEach(r => {
+    r.classList.toggle("selected",           r.dataset.nodeId === S.selected);
+    r.classList.toggle("connecting-source",  r.dataset.nodeId === S.connecting);
+  });
+}
+
+// ── Connect cursor line ────────────────────────────────────────────────────
+function onNodeMouseMove(nodeId, ev) {
+  if (S.mode !== "connect" || !S.connecting) return;
+  const src = S.nodeMap[S.connecting];
+  if (!src) return;
+  const svg  = document.getElementById("overlay");
+  const rect = svg.getBoundingClientRect();
+  const scaleX = S.canvas.w / rect.width;
+  const scaleY = S.canvas.h / rect.height;
+  const mx = (ev.clientX - rect.left) * scaleX;
+  const my = (ev.clientY - rect.top)  * scaleY;
+  const line = document.getElementById("connect-line");
+  line.setAttribute("x1", src.xmin + src.w / 2);
+  line.setAttribute("y1", src.ymin + src.h / 2);
+  line.setAttribute("x2", mx);
+  line.setAttribute("y2", my);
+  line.style.display = "";
+}
+function clearConnectLine() {
+  if (!S.connecting) document.getElementById("connect-line").style.display = "none";
+}
+
+// ── Event handlers ─────────────────────────────────────────────────────────
+function onNodeClick(nodeId, ev) {
+  ev.stopPropagation();
+  if (S.mode === "select") {
+    S.selected = nodeId;
+    refreshNodeHighlight();
+    loadNodeProps(nodeId);
+  } else if (S.mode === "connect") {
+    if (!S.connecting) {
+      S.connecting = nodeId;
+      refreshNodeHighlight();
+      hint("Now click the target node to connect. Click elsewhere to cancel.");
+    } else if (S.connecting === nodeId) {
+      // Clicked same node — cancel
+      S.connecting = null;
+      clearConnectLine();
+      refreshNodeHighlight();
+      hint("Connection cancelled.");
+    } else {
+      const src = S.connecting, dst = nodeId;
+      S.connecting = null;
+      clearConnectLine();
+      refreshNodeHighlight();
+      const key = _edgeKey(src, dst);
+      if (S.edgeSet.has(key)) { toast("Edge already exists.", "err"); return; }
+      confirm_(`Add PIPE edge:<br><code>${src}</code> ↔ <code>${dst}</code>`,
+        "Add Edge", () => doAddEdge(src, dst));
+    }
+  } else if (S.mode === "erase") {
+    hint("In ERASE mode — hover over an edge line and click it to remove it.");
+  }
+}
+
+function onEdgeClick(src, tgt, ev) {
+  if (S.mode !== "erase") return;
+  ev.stopPropagation();
+  confirm_(`Remove PIPE edge:<br><code>${src}</code> ↔ <code>${tgt}</code>`,
+    "Remove Edge", () => doRemoveEdge(src, tgt));
+}
+
+// Cancel connecting if clicking empty canvas
+document.getElementById("overlay").addEventListener("click", ev => {
+  if (ev.target.id === "overlay" || ev.target.tagName === "svg") {
+    if (S.mode === "connect" && S.connecting) {
+      S.connecting = null; clearConnectLine(); refreshNodeHighlight(); hint("Cancelled.");
+    }
+  }
+});
+
+// ── Mode switching ─────────────────────────────────────────────────────────
+function setMode(m) {
+  S.mode = m; S.connecting = null; clearConnectLine(); refreshNodeHighlight();
+  ["select","connect","erase"].forEach(id => {
+    document.getElementById(`btn-${id}`).classList.toggle("active", id === m);
+  });
+  const hints = {
+    select: "Click a node to inspect and edit its properties.",
+    connect: "Click source node, then click target node to add a PIPE edge.",
+    erase: "Hover over an edge line and click it to remove it.",
+  };
+  hint(hints[m]);
+}
+
+function hint(msg) { document.getElementById("mode-hint").textContent = msg; }
+
+// ── Load node properties ───────────────────────────────────────────────────
+async function loadNodeProps(nodeId) {
+  const r = await fetch(`/api/node_props/${S.pidId}/${encodeURIComponent(nodeId)}`);
+  if (!r.ok) { document.getElementById("props-container").innerHTML = '<div class="empty-state">Node not found.</div>'; return; }
+  const props = await r.json();
+  renderPropsPanel(nodeId, props);
+}
+
+function renderPropsPanel(nodeId, props) {
+  const skip = new Set(["xmin","ymin","xmax","ymax","bbox","source","pid_id"]);
+  const topKeys = ["label","functional_label","structural_type","flow_state","flow_direction"];
+
+  let html = `<div class="prop-node-id">${nodeId}</div>`;
+
+  // Label dropdown
+  const currentLabel = props.label || "";
+  html += `<div class="prop-row">
+    <span class="prop-key">label</span>
+    <select class="prop-val prop-select" id="edit-label">
+      ${VALID_LABELS.map(l => `<option value="${l}" ${l===currentLabel?"selected":""}>${l}</option>`).join("")}
+    </select>
+  </div>`;
+
+  // Functional label
+  html += `<div class="prop-row">
+    <span class="prop-key">functional_label</span>
+    <input class="prop-val" id="edit-func-label" type="text" value="${props.functional_label||""}" placeholder="e.g. pump">
+  </div>`;
+
+  // Other top-level props (editable)
+  topKeys.filter(k => !["label","functional_label"].includes(k) && props[k] !== undefined).forEach(k => {
+    html += `<div class="prop-row">
+      <span class="prop-key">${k}</span>
+      <input class="prop-val" type="text" id="edit-prop-${k}" value="${_esc(String(props[k]||""))}">
+    </div>`;
+  });
+
+  html += `<button class="btn-apply" onclick="applyPropChanges('${nodeId}')">Apply Changes</button>
+           <button class="btn-connect-from" onclick="startConnectFrom('${nodeId}')">+ Connect From This Node</button>`;
+
+  // Read-only info table
+  const infoKeys = Object.keys(props).filter(k => !topKeys.includes(k) && !skip.has(k));
+  if (infoKeys.length) {
+    html += `<div style="margin-top:14px"><div class="section-label">All Properties</div>
+    <table class="kv-table">`;
+    infoKeys.forEach(k => {
+      const v = Array.isArray(props[k]) ? `[${props[k].slice(0,4).join(", ")}${props[k].length>4?"…":""}]` : String(props[k]??"");
+      html += `<tr><td>${k}</td><td>${_esc(v)}</td></tr>`;
+    });
+    html += `</table></div>`;
+  }
+
+  document.getElementById("props-container").innerHTML = html;
+  // Store props for change detection
+  document.getElementById("props-container").dataset.props = JSON.stringify(props);
+  // Pre-fill Connect-by-ID source with the currently selected node
+  const cSrc = document.getElementById("cbyid-src");
+  if (cSrc) cSrc.value = nodeId;
+}
+
+function startConnectFrom(nodeId) {
+  setMode("connect");
+  S.connecting = nodeId;
+  refreshNodeHighlight();
+  hint(`Source locked to "${nodeId}". Now click the target node.`);
+}
+
+async function applyPropChanges(nodeId) {
+  const stored  = JSON.parse(document.getElementById("props-container").dataset.props || "{}");
+  const newLabel = document.getElementById("edit-label")?.value;
+  const newFL    = document.getElementById("edit-func-label")?.value ?? null;
+  const patches  = [];
+
+  if (newLabel && newLabel !== stored.label) {
+    patches.push({op:"relabel", node_id:nodeId, new_value:newLabel});
+  }
+  if (newFL !== null && newFL !== (stored.functional_label ?? "")) {
+    patches.push({op:"set_property", node_id:nodeId, prop_key:"functional_label", new_value:newFL||null});
+  }
+  // Other editable top-level props
+  ["flow_state","flow_direction","structural_type"].forEach(k => {
+    const el = document.getElementById(`edit-prop-${k}`);
+    if (el && el.value !== String(stored[k]??"")) {
+      patches.push({op:"set_property", node_id:nodeId, prop_key:k, new_value:el.value});
+    }
+  });
+
+  if (!patches.length) { toast("No changes detected.", ""); return; }
+
+  for (const p of patches) {
+    const ok = await doRawPatch({...p, pid_id: S.pidId});
+    if (!ok) return;
+  }
+  await refreshEdgesAndPatches();
+  await loadNodeProps(nodeId);
+}
+
+// ── Patch operations ───────────────────────────────────────────────────────
+async function doAddEdge(src, dst) {
+  const ok = await doRawPatch({op:"add_edge", pid_id:S.pidId, node_id:src, target_id:dst});
+  if (ok) await refreshEdgesAndPatches();
+}
+
+async function doRemoveEdge(src, dst) {
+  const ok = await doRawPatch({op:"remove_edge", pid_id:S.pidId, node_id:src, target_id:dst});
+  if (ok) await refreshEdgesAndPatches();
+}
+
+async function doRawPatch(body) {
+  try {
+    const r = await fetch("/api/patch", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const data = await r.json();
+    if (!r.ok) { toast(data.error || "Patch failed", "err"); return false; }
+    toast(`✓ ${body.op}`, "ok");
+    return true;
+  } catch (e) { toast("Network error", "err"); return false; }
+}
+
+async function undoPatch(pidId, patchId) {
+  try {
+    const r = await fetch(`/api/patch/${pidId}/${patchId}`, {method:"DELETE"});
+    const data = await r.json();
+    if (!r.ok) { toast(data.error || "Undo failed", "err"); return; }
+    toast("Patch reverted", "ok");
+    await refreshEdgesAndPatches();
+    if (S.selected) await loadNodeProps(S.selected);
+  } catch (e) { toast("Network error", "err"); }
+}
+
+async function refreshEdgesAndPatches() {
+  const [edgesRes, patchesRes] = await Promise.all([
+    fetch(`/api/edges/${S.pidId}`).then(r => r.json()),
+    fetch(`/api/patches/${S.pidId}`).then(r => r.json()),
+  ]);
+  S.edges   = edgesRes;
+  S.patches = patchesRes;
+  S.edgeSet = new Set();
+  S.edges.forEach(e => S.edgeSet.add(_edgeKey(e.source, e.target)));
+  renderEdges();
+  renderNodes();
+  renderPatches();
+  refreshStatus();
+}
+
+// ── Patch history rendering ────────────────────────────────────────────────
+function renderPatches() {
+  const el = document.getElementById("patch-list");
+  if (!S.patches.length) { el.innerHTML = '<div class="no-patches">No patches yet.</div>'; return; }
+  el.innerHTML = [...S.patches].reverse().map(p => {
+    const ts = new Date(p.ts).toLocaleString();
+    let desc = "";
+    if (p.op === "add_edge")     desc = `${p.node_id} ↔ ${p.target_id}`;
+    else if (p.op === "remove_edge") desc = `${p.node_id} ↔ ${p.target_id}`;
+    else if (p.op === "relabel") desc = `${p.node_id}: → "${p.new_value}"`;
+    else if (p.op === "set_property") desc = `${p.node_id}.${p.prop_key} = "${p.new_value}"`;
+    else if (p.op === "rename_node") desc = `"${p.old_value}" → "${p.new_value}"`;
+    return `<div class="patch-item">
+      <span class="patch-op op-${p.op}">${p.op}</span>
+      <div class="patch-desc">${_esc(desc)}</div>
+      <div class="patch-ts">${ts}</div>
+      <button class="btn-undo" onclick="undoPatch('${p.pid_id}','${p.patch_id}')">UNDO</button>
+    </div>`;
+  }).join("");
+}
+
+function refreshStatus() {
+  document.getElementById("status-nodes").textContent   = `${S.nodes.length} nodes`;
+  document.getElementById("status-edges").textContent   = `${S.edges.length} edges`;
+  document.getElementById("status-patches").textContent = `${S.patches.length} patches`;
+}
+
+// ── Download corrected GraphML ─────────────────────────────────────────────
+function downloadGraphML() {
+  if (!S.pidId) return;
+  window.open(`/api/graphml/${S.pidId}`, "_blank");
+}
+// ── Node tooltip ─────────────────────────────────────────────────────
+function showNodeTip(n, ev) {
+  const tip = document.getElementById("node-tip");
+  const sub = [n.label, n.functional_label].filter(Boolean).join(" · ");
+  tip.innerHTML = `<b style="color:var(--al)">${_esc(n.id)}</b>${sub ? "<br>" + _esc(sub) : ""}`;
+  tip.style.display = "block";
+  tip.style.left = (ev.clientX + 14) + "px";
+  tip.style.top  = (ev.clientY - 8)  + "px";
+}
+function _moveNodeTip(ev) {
+  const tip = document.getElementById("node-tip");
+  if (tip.style.display !== "none") {
+    tip.style.left = (ev.clientX + 14) + "px";
+    tip.style.top  = (ev.clientY - 8)  + "px";
+  }
+}
+function hideNodeTip() { document.getElementById("node-tip").style.display = "none"; }
+
+// ── Connect by Node ID ──────────────────────────────────────────────
+async function connectByID() {
+  const src = (document.getElementById("cbyid-src")?.value || "").trim();
+  const dst = (document.getElementById("cbyid-dst")?.value || "").trim();
+  if (!src || !dst)    { toast("Enter both source and target IDs.", "err"); return; }
+  if (src === dst)     { toast("Source and target must differ.", "err"); return; }
+  if (!S.nodeMap[src]) { toast(`"${src}" not found in this PID.`, "err"); return; }
+  if (!S.nodeMap[dst]) { toast(`"${dst}" not found in this PID.`, "err"); return; }
+  const key = _edgeKey(src, dst);
+  if (S.edgeSet.has(key)) { toast("Edge already exists.", "err"); return; }
+  confirm_(`Add PIPE edge:<br><code>${_esc(src)}</code> ↔ <code>${_esc(dst)}</code>`,
+    "Add Edge", () => doAddEdge(src, dst));
+}
+// ── Confirm dialog ─────────────────────────────────────────────────────────
+let _confirmCb = null;
+function confirm_(body, title, cb) {
+  document.getElementById("confirm-title").textContent = title;
+  document.getElementById("confirm-body").innerHTML    = body;
+  _confirmCb = cb;
+  const okBtn = document.getElementById("confirm-ok");
+  okBtn.textContent = title;
+  document.getElementById("confirm-overlay").style.display = "flex";
+  okBtn.onclick = () => { document.getElementById("confirm-overlay").style.display = "none"; if (_confirmCb) _confirmCb(); };
+}
+function confirmCancel() { document.getElementById("confirm-overlay").style.display = "none"; _confirmCb = null; }
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+let _toastTimer = null;
+function toast(msg, type) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.className   = "show " + (type || "");
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { el.className = ""; }, 2400);
+}
+
+// ── Utilities ──────────────────────────────────────────────────────────────
+function _edgeKey(a, b) { return [a, b].sort().join("|"); }
+function _esc(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+</script>
+</body>
+</html>
