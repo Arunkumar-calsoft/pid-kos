@@ -52,14 +52,18 @@ UI       Flask         Chatbot console (port 8080) + GraphML editor (port 8081)
 
 ```bash
 # 1. Clone and install dependencies
-pip install -r requirements.txt   # or: pip install -e .
+pip install -r requirements.txt
 
-# 2. Configure Neo4j and storage paths
+# 2. Configure Neo4j connection
 cp config/neo4j.yaml.example    config/neo4j.yaml
-cp config/storage.yaml.example  config/storage.yaml
-#    → edit both files with your local values
+#    → set your Neo4j URI, user, password, and database name
 
-# 3. Set your LLM API key (never commit the real key)
+# 3. Configure storage (where your P&ID drawing files live)
+cp config/storage.yaml.example  config/storage.yaml
+#    → set store_root to the absolute path of your pid_store folder
+#    → folder structure: pid_store/<PLANT_ID>/<SKID_ID>/<PID_ID>/<drawing>.graphml + .png
+
+# 4. Set your LLM API key (never commit the real key)
 cp agent/groq.env.example  agent/groq.env
 #    → paste your Groq API key
 

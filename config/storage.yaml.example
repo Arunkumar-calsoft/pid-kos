@@ -1,15 +1,32 @@
 # config/storage.yaml
 #
-# store_root is the base directory for all PID source files.
-# File paths stored in Neo4j PID nodes are RELATIVE to this root.
+# PURPOSE:
+#   Tells the pipeline where to find P&ID source files (GraphML drawings + images).
+#   All file paths stored inside Neo4j are RELATIVE to store_root, so you only
+#   need to change this one value if you move the files to another machine or share.
 #
-# Example:
-#   store_root: /path/to/project/pid_store
-#   PID node:   graphml_path = PLANT_001/SKID_01/PID_2/2.graphml
-#   Resolved:   /path/to/project/pid_store/PLANT_001/SKID_01/PID_2/2.graphml
+# REQUIRED FOLDER STRUCTURE under store_root:
 #
-# To move files to a network share, change store_root here only.
-# No Neo4j data changes required.
+#   pid_store/
+#   └── <PLANT_ID>/               e.g. PLANT_001
+#       └── <SKID_ID>/            e.g. SKID_01
+#           └── <PID_ID>/         e.g. PID_0
+#               ├── <name>.graphml    ← graph topology (nodes + edges)
+#               └── <name>.png        ← drawing image shown in the web UI
+#
+# USED BY:
+#   - scripts/register_pid.py     → registers a new PID into Neo4j
+#   - engine/phase0_ingestion/    → reads the GraphML file during ingestion
+#   - server.py                   → serves the PNG image to the browser UI
+#   - editor_server.py            → serves image + GraphML in the admin editor
+#
+# HOW TO SET IT UP:
+#   1. Copy this file to config/storage.yaml
+#   2. Set store_root to the absolute path of your pid_store folder
+#   3. Place your drawings under the folder structure above
+#   4. Run: python scripts/register_pid.py PLANT_001 SKID_01 PID_0 path/to/drawing.graphml
 
 storage:
-  store_root: "/absolute/path/to/your/pid_store"
+  store_root: "C:/absolute/path/to/your/pid_store"
+  # Windows example: "C:/Users/yourname/project/pid_store"
+  # Linux example:   "/home/yourname/project/pid_store"
