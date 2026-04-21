@@ -2,8 +2,8 @@
 
 ## Complete Project Documentation
 
-**Version**: 1.0  
-**Date**: March 27, 2026  
+**Version**: 1.1  
+**Date**: April 21, 2026  
 **Author**: Arun Kumar — Calsoft Pvt Ltd
 
 ---
@@ -37,11 +37,12 @@ PID-KOS is a **complete automated P&ID (Piping & Instrumentation Diagram) analys
 3. **Determines** flow direction through evidence collection (arrows, equipment semantics, check valves, topology inference) and a finite state machine with BFS propagation
 4. **Validates** 9 engineering rules at 3 severity levels (CRITICAL/HIGH/MEDIUM) against a domain-knowledge dictionary covering 4 skid types and 3 process conditions
 5. **Detects** 30+ structural patterns (branches, dead-ends, orphans, cycles, parallel paths, pattern rarity)
-6. **Provides** ~69 pre-verified analytical Cypher queries across 10 categories
+6. **Provides** 333 pre-verified analytical Cypher queries across 17 categories
 7. **Builds** deterministic reasoning traces for auditability
 8. **Supports** human-in-the-loop review with approval workflows and cross-PID statistical normalization
 9. **Exposes** a chatbot agent that classifies 15+ intent types and generates engineer-readable natural language answers backed by LLM explanation
 10. **Serves** a web UI with drawing visualization, node highlighting, violation overlays, and interactive Q&A
+11. **Provides** a standalone GraphML correction editor (port 8081) for admin patching of drawing topology live in Neo4j, with corrected GraphML export for pipeline re-ingestion
 
 ### Technology Stack
 
@@ -52,6 +53,7 @@ PID-KOS is a **complete automated P&ID (Piping & Instrumentation Diagram) analys
 | Web Server | Flask |
 | LLM | Groq API (Llama/Mixtral) |
 | Frontend | Vanilla HTML/JS (single-page) |
+| GraphML Editor | Standalone Flask app (port 8081) + SVG canvas |
 | Configuration | YAML + JSON |
 
 ---
@@ -74,7 +76,7 @@ PID-KOS is a **complete automated P&ID (Piping & Instrumentation Diagram) analys
 │   Phase 4    │────→│   Phase 5    │────→│   Phase 6    │────→│   Phase 7    │
 │  FSM Flow    │     │Cypher Query  │     │  Reasoning   │     │ HITL Review  │
 │  Resolution  │     │  Registry    │     │   Traces     │     │+ Corpus +    │
-│              │     │  (69 qry)    │     │              │     │ Global Stats │
+│              │     │ (333 qry)    │     │              │     │ Global Stats │
 └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
                                                                       │
        ┌──────────────────────────────────────────────────────────────┘
@@ -212,13 +214,13 @@ See [Section 5](#5-flow-resolution-fsm-phase-4) for full details.
 
 ### Phase 5 — Cypher Query Registry
 
-**Purpose**: Build a static registry of all analytical Cypher queries across 10 categories. Validate each file is atomic and contains a `RETURN` clause. The registry is the authority for the chatbot agent.
+**Purpose**: Build a static registry of all analytical Cypher queries across 17 categories. Validate each file is atomic and contains a `RETURN` clause. The registry is the authority for the chatbot agent.
 
 **Key features**:
 - Scans `engine/phase5_cypher/` for `.cypher` files organized by category
 - Validates query syntax (atomic, has RETURN)
 - Builds `_meta/queries.json` registry file
-- 58-69 queries across 10 categories (see Section 7)
+- 333 queries across 17 categories (see Section 7)
 
 **Input**: `.cypher` files in categorized folders  
 **Output**: `_meta/queries.json` registry, PHASE5_COMPLETE status
@@ -422,20 +424,27 @@ Priority 4 (lowest):  Universal base              — UNIVERSAL_EQUIPMENT dictio
 
 ### Query Categories
 
-| Category | # Queries | Example Queries |
+| Category | # Queries | Description |
 |---|---|---|
-| **topology** | 10 | Equipment paths, series/parallel, isolated equipment, shared connections, largest connected group |
-| **valves** | 7 | Valve inventory, valves on pumps, valves on segments, dangling valves, valves between components |
-| **instruments** | 9 | Instrument inventory by prefix, instruments on equipment/lines, evidence-supported, no-host instruments |
-| **inventory** | 5 | Equipment inventory, unconnected equipment, multi-nozzle equipment, equipment by skid |
-| **quality** | 7 | Consistency checks, orphan annotations, orphan arrows, duplicate tags, pipe segments without physical nodes |
-| **directionality** | 7 | Arrow coverage, flow direction between components, orphan arrows, runs with/without direction |
-| **external** | 6 | Boundary interfaces, interface count, equipment at boundaries, orphan boundary nodes |
-| **lines** | 9 | Line segments, branches/joins, equipment connections, isolated lines, identical geometry |
-| **reachability** | 6 | Structural isolation, reachability from equipment, fully isolated symbols, largest piping network |
-| **redundancy** | 3 | Annotation evidence, explicit duplicates, repeated structural patterns |
+| **annotations** | 45 | Annotation requests, ESV/KAV patterns, severity breakdown |
+| **cross_domain** | 15 | Multi-domain queries: valves + flow + annotations together |
+| **directionality** | 19 | Arrow coverage, orphan arrows, flow direction analysis |
+| **engineering_correctness** | 28 | Rule violations, HITL status, pending reviews |
+| **equipment_semantics** | 10 | Equipment classification, functional labels |
+| **external** | 16 | Boundary nodes, inlet/outlet connections, interface count |
+| **flow_coverage** | 12 | Flow direction observations, LPS evidence completeness |
+| **flow_nodes** | 10 | Node-level flow state and direction |
+| **instruments** | 19 | Instrument inventory, attachment, evidence-supported |
+| **inventory** | 19 | Equipment inventory, unconnected equipment |
+| **lines** | 35 | Pipe segments, LPS, flow state breakdown |
+| **pipe_edges** | 8 | PIPE edge queries, symbol connections |
+| **quality** | 26 | Structural anomalies, orphans, junction analysis |
+| **reachability** | 17 | Isolated components, connected network queries |
+| **redundancy** | 14 | Pattern frequency, rarity scoring, motif chains |
+| **topology** | 21 | Equipment paths, series/parallel, degree analysis |
+| **valves** | 19 | Valve inventory, flow direction, connections |
 
-**Total: ~69 verified Cypher queries**
+**Total: 333 verified Cypher queries**
 
 ---
 
@@ -555,6 +564,33 @@ User question
 }
 ```
 
+### GraphML Correction Editor (port 8081)
+
+A standalone admin tool for correcting drawing topology errors discovered during analysis. Runs independently of the main chatbot server.
+
+**Server**: `editor_server.py` — Flask app on port 8081, serves `ui/editor.html`
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/pids` | GET | Lists available PID IDs |
+| `/api/image/<pid_id>` | GET | Serves the P&ID drawing image |
+| `/api/nodes/<pid_id>` | GET | All node positions and labels |
+| `/api/edges/<pid_id>` | GET | All PIPE/CONNECTED edges |
+| `/api/node_props/<pid_id>/<node_id>` | GET | Full Neo4j properties for a node |
+| `/api/patches/<pid_id>` | GET | Patch history for a PID |
+| `/api/patch` | POST | Apply a new patch (add/remove edge, set property) |
+| `/api/patch/<pid_id>/<patch_id>` | DELETE | Revert a specific patch |
+| `/api/graphml/<pid_id>` | GET | Download corrected GraphML for re-ingestion |
+
+**Editor UI features** (`ui/editor.html`):
+- Three interaction modes: **SELECT** (inspect/edit properties), **CONNECT** (draw PIPE edges), **ERASE** (remove edges)
+- Zoom/pan canvas with scroll wheel and middle-drag; +/−/⊞ buttons
+- Node hover tooltips with label and node ID
+- "Connect by Node ID" panel with autocomplete for micro-connections
+- All changes patched live into Neo4j AND saved to `patches/{pid_id}_patches.json`
+- "⬇ CORRECTED GRAPHML" downloads patched GraphML for Phase 0 re-ingestion
+- Completely isolated: zero imports from `server.py`, `agent/`, or `engine/`
+
 ---
 
 ## 10. Graph Schema Reference
@@ -626,7 +662,7 @@ User question
 | Engineering rule validation | Configurable | No | Manual checklist | **Yes** (9 rules, 3 severities) |
 | Structural pattern detection | Limited | No | No | **Yes** (30+ patterns) |
 | Natural language querying | No | No | No | **Yes** (15+ intent types) |
-| Graph-based reasoning | No (SQL) | No | No | **Yes** (Neo4j + 69 Cypher queries) |
+| Graph-based reasoning | No (SQL) | No | No | **Yes** (Neo4j + 333 Cypher queries) |
 | Cross-drawing analysis | Yes (full model) | Limited | No | Partial (corpus + global stats) |
 | HITL approval workflow | Yes | No | Yes | **Yes** |
 | Setup cost | $15K–$80K/seat | $50K–$500K | $5K–$30K | **Near zero** (OSS stack) |
@@ -845,11 +881,12 @@ Step 5: Add OCR head (separate or joint)
 ### Near-Term (Implemented)
 
 - [x] Phase 0-4: Full pipeline (ingestion → flow resolution)
-- [x] Phase 5: Cypher query registry (69 queries, 10 categories)
+- [x] Phase 5: Cypher query registry (333 queries, 17 categories)
 - [x] Phase 6: Reasoning trace generation
 - [x] Phase 7: HITL + corpus + global statistics
 - [x] Phase 8: LLM agent (15+ intents, NL explanation)
 - [x] Web UI with violation overlays and node highlighting
+- [x] Standalone GraphML correction editor (port 8081) with live Neo4j patching
 - [x] 9 engineering rules at 3 severity levels
 - [x] 4-level semantic override system
 - [x] Cross-PID statistical normalization
@@ -879,12 +916,15 @@ Step 5: Add OCR head (separate or joint)
 
 ```
 Chatbot/
-├── server.py                          # Flask server + API endpoints
+├── server.py                          # Flask chatbot server + API endpoints (port 8080)
+├── editor_server.py                   # Standalone GraphML correction editor (port 8081)
+├── requirements.txt                   # Python dependencies (pinned)
 ├── pyproject.toml                     # Project metadata
 ├── config/
-│   ├── neo4j.yaml                     # Neo4j connection config
-│   └── storage.yaml                   # File storage paths
+│   ├── neo4j.yaml.example             # Neo4j connection config template
+│   └── storage.yaml.example           # File storage paths template
 ├── agent/
+│   ├── groq.env.example               # LLM API key template
 │   ├── agent.py                       # Main agent orchestrator
 │   ├── intent_parser.py               # Keyword-based intent extraction
 │   ├── intent_confirmer.py            # LLM intent reclassification
@@ -917,28 +957,38 @@ Chatbot/
 │   │   └── global_statistics.py       # Cross-skid statistical aggregation
 │   ├── phase4_fsm/
 │   │   └── fsm_core.py               # Flow resolution FSM + GlobalStats Step 0c
-│   ├── phase5_cypher/                 # 69 analytical Cypher queries
+│   ├── phase5_cypher/                 # 333 analytical Cypher queries (17 categories)
 │   ├── phase6_trace/                  # Reasoning trace builder
 │   └── phase7_hitl/
 │       └── approval.py               # HITL approval workflow
+├── graphml_editor/                    # Standalone admin editor package
+│   ├── __init__.py
+│   ├── patch_store.py                 # Append-only JSON patch persistence
+│   ├── neo4j_patcher.py               # Live Neo4j patch application/revert
+│   └── graphml_patcher.py             # Patched GraphML export for re-ingestion
 ├── scripts/
 │   ├── register_pid.py                # PID registration utility
-│   ├── run_phase0.py                  # Phase 0 orchestrator
-│   ├── run_phase1.py                  # Phase 1 orchestrator
-│   ├── run_phase2.py                  # Phase 2 orchestrator
-│   ├── run_phase3.py                  # Phase 3 orchestrator
-│   ├── run_phase4.py                  # Phase 4 orchestrator
-│   ├── run_phase5.py                  # Phase 5 orchestrator
-│   ├── run_phase6.py                  # Phase 6 orchestrator
-│   └── run_phase7.py                  # Phase 7 orchestrator
+│   ├── run_phase0.py – run_phase7.py  # Phase orchestrators
+│   ├── audit_annotations.py           # Annotation audit utility
+│   ├── audit_trace_consistency.py     # Trace consistency checker
+│   ├── check_db_state.py              # Database state inspector
+│   └── clear_db.py                    # Database reset utility
 ├── tests/
-│   ├── schema.md                      # Grounded schema documentation
+│   ├── smoke_engineering.py           # Engineering rule smoke tests
+│   ├── smoke_safety.py                # Safety rule smoke tests
+│   ├── smoke_tiers.py                 # Tier/severity smoke tests
+│   ├── verify_agent_logic.py          # Agent intent verification
 │   └── verify_phase*.py               # Phase verification scripts
 ├── ui/
-│   └── index.html                     # Web UI
-├── pid_store/                         # PID data storage
+│   ├── index.html                     # Main chatbot web UI
+│   └── editor.html                    # Admin GraphML editor UI
+├── docs/
+│   ├── PROJECT_OVERVIEW.md            # This document
+│   ├── DEMO_QUERIES.md                # Example queries reference
+│   └── Command.md                     # CLI command reference
+├── pid_store/                         # PID data storage (gitignored)
 │   └── PLANT_001/                     # Per-plant PID files
-└── logs/                              # Pipeline logs
+└── logs/                              # Pipeline logs (gitignored)
 ```
 
 ---
@@ -975,4 +1025,5 @@ store_root: ./pid_store
 
 ---
 
-*Document generated March 27, 2026 — PID-KOS v1.0*
+*Document generated March 27, 2026 — PID-KOS v1.0  
+Updated April 21, 2026 — PID-KOS v1.1*
